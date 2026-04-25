@@ -39,10 +39,13 @@ Modern browsers often block "automatic" multiple downloads for security.
 - **If downloads stop**: Check your address bar (usually on the right) for a "Downloads blocked" icon. Click it and select **"Always allow downloads from this site"**.
 - **Pop-up Blockers**: Ensure pop-ups are allowed, as some download triggers might be caught by aggressive blockers.
 
-### Rate Limiting
-Public APIs like Cobalt can occasionally be flaky or rate-limited.
+### Rate Limiting & Reliability
+Public APIs can occasionally be flaky or rate-limited. Spotrack uses a multi-layered approach to stay working:
+- **Search API**: If the app fails to find tracks, open **⚙ Settings** and try a different "Search API" URL (e.g., from a Piped or Invidious instance list).
+- **Local Bridge (Experimental)**: For 100% reliability, you can run a small Python script locally that bridges Spotrack to your local `yt-dlp` installation. See Settings for the command.
+- **Cobalt Instance**: You can switch the downloader instance if the default is down.
 - **Retry**: Use the **↺ Retry Failed** button to attempt failed downloads again after a short wait.
-- **Delay**: You can adjust the delay between downloads in the Settings (coming soon) to be more "stealthy".
+- **Delay**: Increase the delay between tracks in Settings to reduce the chance of being blocked.
 
 ### Storage Limits
 Spotrack saves your track list in your browser's local storage. If you load thousands of tracks, you might hit the storage limit (typically 5MB).

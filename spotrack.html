@@ -270,8 +270,29 @@ Happier Than Ever · Billie Eilish"></textarea>
   <div id="settings-pane" style="display:none; background:var(--s1); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;">
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
-        <label>Cobalt Instance</label>
+        <label>Cobalt Instance (Downloader)</label>
         <input type="text" id="cobalt-url" value="https://co.wuk.sh" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+      </div>
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
+        <label>Search API (Piped/Invidious)</label>
+        <input type="text" id="search-url" value="https://pipedapi.kavin.rocks" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+      </div>
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
+        <label>CORS Proxy (Optional)</label>
+        <input type="text" id="cors-proxy" value="" placeholder="https://corsproxy.io/?" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+      </div>
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto; grid-column: span 2;">
+        <label>Local Bridge Command (Run this for 100% reliability)</label>
+        <div style="display:flex; gap:6px; width:100%;">
+          <input type="text" id="bridge-cmd" readonly value='pip install flask flask-cors yt-dlp && python -c "$(curl -fsSL https://raw.githubusercontent.com/spotrack/bridge.py)"' style="flex:1; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--g); font-family:var(--mono); font-size:10px; padding:6px 10px;">
+          <button class="copy-btn" onclick="copyText(document.getElementById('bridge-cmd').value, '📋 Command copied')">⎘ Copy</button>
+        </div>
+      </div>
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto; grid-column: span 2;">
+        <label>Search Fallback: Direct Search mode</label>
+        <label class="check-label" style="width:100%; border:none; padding:0; background:none;">
+          <input type="checkbox" id="direct-search-mode"> Skip search APIs, send title directly to downloader
+        </label>
       </div>
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>Delay (ms)</label>
@@ -279,7 +300,7 @@ Happier Than Ever · Billie Eilish"></textarea>
       </div>
     </div>
     <div style="margin-top:10px; font-size:10px; color:var(--muted);">
-      Pro tip: Use a custom Cobalt instance if the default is down. Increase delay if you get rate-limited.
+      Pro tip: If search fails, try changing the Search API to another Piped instance (e.g., piped-api.lunar.icu).
     </div>
   </div>
 
@@ -397,7 +418,14 @@ let dlScriptText = '';
 // ─────────────────────────────────────────────
 function saveState() {
   try {
-    const data = JSON.stringify({ tracks: allTracks });
+    const config = {
+      cobalt: document.getElementById('cobalt-url').value,
+      search: document.getElementById('search-url').value,
+      cors: document.getElementById('cors-proxy').value,
+      direct: document.getElementById('direct-search-mode').checked,
+      delay: document.getElementById('dl-delay').value
+    };
+    const data = JSON.stringify({ tracks: allTracks, config });
     if (data.length > 4000000) { // ~4MB
       toast('⚠ Storage nearly full! Clear some tracks.');
     }
@@ -414,6 +442,13 @@ function loadSaved() {
     const s = localStorage.getItem(STORAGE_KEY);
     if (!s) return;
     const data = JSON.parse(s);
+    if (data.config) {
+      document.getElementById('cobalt-url').value = data.config.cobalt || 'https://co.wuk.sh';
+      document.getElementById('search-url').value = data.config.search || 'https://pipedapi.kavin.rocks';
+      document.getElementById('cors-proxy').value = data.config.cors || '';
+      document.getElementById('direct-search-mode').checked = !!data.config.direct;
+      document.getElementById('dl-delay').value = data.config.delay || '2000';
+    }
     if (data.tracks && data.tracks.length) {
       allTracks = data.tracks;
       applyFilter();
@@ -705,42 +740,75 @@ function updateStats() {
 // ─────────────────────────────────────────────
 // DOWNLOAD ENGINE
 // ─────────────────────────────────────────────
-async function searchYoutube(track) {
+async function searchYoutube(track, idx) {
   const q = `${track.name} ${track.artist}`.toLowerCase();
-  const searchUrls = [
+  const userSearch = (document.getElementById('search-url').value || '').replace(/\/$/, '');
+
+  const searchUrls = [];
+  if (userSearch) {
+    if (userSearch.includes('piped')) searchUrls.push(`${userSearch}/search?q=${encodeURIComponent(q)}&filter=videos`);
+    else searchUrls.push(`${userSearch}/api/v1/search?q=${encodeURIComponent(q)}&type=video`);
+  }
+
+  // Expanded fallback list with more diverse instances
+  const fallbacks = [
     `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(q)}&filter=videos`,
-    `https://invidious.v6.rocks/api/v1/search?q=${encodeURIComponent(q)}&type=video`
+    `https://invidious.asir.dev/api/v1/search?q=${encodeURIComponent(q)}&type=video`,
+    `https://piped-api.lunar.icu/search?q=${encodeURIComponent(q)}&filter=videos`,
+    `https://inv.nadeko.net/api/v1/search?q=${encodeURIComponent(q)}&type=video`,
+    `https://pipedapi.nosebs.org/search?q=${encodeURIComponent(q)}&filter=videos`,
+    `https://invidious.nerdvpn.de/api/v1/search?q=${encodeURIComponent(q)}&type=video`
   ];
+
+  searchUrls.push(...fallbacks.filter(f => !f.includes(userSearch)));
+
+  const corsProxy = (document.getElementById('cors-proxy').value || '').trim();
 
   for (const url of searchUrls) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!r.ok) continue;
-      const data = await r.json();
-      const results = data.items || data; // Piped uses .items, Invidious is array
-      if (!Array.isArray(results) || !results.length) continue;
+      const instanceName = new URL(url).hostname;
+      if (idx !== undefined) updateTrackLabel(idx, `🔍 Searching via ${instanceName}...`);
 
-      // Try to find the best match (official audio/video)
+      // Try direct first, then with proxy if defined
+      let finalUrl = url;
+      let r = await fetch(finalUrl, { signal: AbortSignal.timeout(5000) }).catch(err => {
+        if (corsProxy) return fetch(corsProxy + url, { signal: AbortSignal.timeout(6000) });
+        throw err;
+      });
+      if (!r.ok) continue;
+
+      const data = await r.json();
+      let results = [];
+      if (Array.isArray(data)) results = data;
+      else if (data.items && Array.isArray(data.items)) results = data.items;
+      else if (data.relatedStreams && Array.isArray(data.relatedStreams)) results = data.relatedStreams;
+
+      if (!results || !results.length) continue;
+
+      // Flexible matching: find official, but settle for anything that mentions the title
       let best = results[0];
-      const keywords = ['official audio', 'official video', 'topic', 'hq'];
-      for (const res of results.slice(0, 5)) {
+      const keywords = ['official audio', 'official video', 'topic', 'hq', 'lyrics'];
+      for (const res of results.slice(0, 6)) {
         const title = (res.title || '').toLowerCase();
-        if (keywords.some(k => title.includes(k)) && title.includes(track.name.toLowerCase())) {
-          best = res;
-          break;
+        const hasTitle = title.includes(track.name.toLowerCase());
+        const hasArtist = !track.artist || title.includes(track.artist.toLowerCase());
+
+        if (hasTitle && hasArtist && keywords.some(k => title.includes(k))) {
+          best = res; break;
         }
+        if (hasTitle && hasArtist) best = res; // Better than just first result
       }
+
       const id = best.videoId || best.id;
-      if (id) return `https://www.youtube.com/watch?v=${id}`;
-    } catch(e) {}
+      if (id) return (id.includes('http')) ? id : `https://www.youtube.com/watch?v=${id}`;
+    } catch(e) {
+      console.warn(`Search instance failed: ${url}`, e);
+    }
   }
   return null;
 }
 
-async function fetchAudioUrl(track) {
-  const ytUrl = await searchYoutube(track);
-  if (!ytUrl) throw new Error('Could not find track on YouTube');
-
+async function fetchAudioUrl(ytUrl) {
   const cobaltBase = document.getElementById('cobalt-url').value.replace(/\/$/, '');
 
   // Attempt Cobalt
@@ -767,15 +835,57 @@ async function fetchAudioUrl(track) {
   throw new Error('Conversion service failed');
 }
 
+function updateTrackLabel(idx, text) {
+  const row = document.getElementById(`row-${idx}`);
+  if (!row) return;
+  const label = row.querySelector('.t-sub');
+  if (label) label.textContent = text;
+}
+
 async function downloadOne(idx) {
   const t = allTracks[idx];
+  const originalSub = `${t.artist ? t.artist + ' · ' : ''}${t.album || ''}`;
   if (t.status === 'fetching' || t.status === 'downloading') return;
 
   setStatus(idx, 'fetching');
   try {
-    const downloadUrl = await fetchAudioUrl(t);
+    const skipSearch = document.getElementById('direct-search-mode').checked;
+    let ytUrl = null;
+
+    if (!skipSearch) {
+      ytUrl = await searchYoutube(t, idx);
+    }
+
+    let downloadUrl = null;
+    if (ytUrl) {
+      updateTrackLabel(idx, '⚙️ Converting...');
+      downloadUrl = await fetchAudioUrl(ytUrl);
+    }
+
+    // Fallback: If search failed, try sending the track name directly to Cobalt
+    if (!downloadUrl) {
+      updateTrackLabel(idx, '🔄 Trying direct search...');
+      const q = `${t.name} ${t.artist} official audio`;
+      const cobaltBase = document.getElementById('cobalt-url').value.replace(/\/$/, '');
+      try {
+        const r = await fetch(`${cobaltBase}/api/json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ url: `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, isAudioOnly: true, aFormat: 'mp3' }),
+          signal: AbortSignal.timeout(15000)
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.url) downloadUrl = d.url;
+        }
+      } catch(e) {}
+    }
+
+    if (!downloadUrl) throw new Error('Search failed. Try a different Search API or the Local Bridge.');
 
     setStatus(idx, 'downloading');
+    updateTrackLabel(idx, '✅ Triggering download...');
+
     const a = document.createElement('a');
     a.href = downloadUrl;
     // Note: Most browsers ignore 'download' attribute on cross-origin URLs unless headers allow it
@@ -787,10 +897,12 @@ async function downloadOne(idx) {
     // Give some time for the browser to trigger the download prompt
     await sleep(1500);
     setStatus(idx, 'done');
+    updateTrackLabel(idx, originalSub);
     toast(`✓ Triggered: ${t.name}`);
   } catch(e) {
     console.error(e);
     setStatus(idx, 'failed');
+    updateTrackLabel(idx, originalSub);
     toast(`✕ Failed: ${t.name} — ${e.message}`);
   }
 }
