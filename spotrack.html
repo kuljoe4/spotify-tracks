@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spotrack — Playlist + Download Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Clash+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --g: #1ed760; --bg: #080808; --s1: #101010; --s2: #161616; --s3: #1e1e1e;
+    --border: #252525; --text: #eeeeee; --muted: #555; --muted2: #888;
+    --red: #e84040; --amber: #f5a623; --blue: #3b8eea;
+    --mono: 'DM Mono', monospace; --display: 'Clash Display', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; min-height: 100vh; }
+  body::after { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px); pointer-events:none; z-index:9999; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 24px 14px 80px; }
+
+  /* HEADER */
+  header { display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:28px; padding-bottom:16px; border-bottom:1px solid var(--border); }
+  .logo { font-family:var(--display); font-weight:700; font-size:30px; letter-spacing:-1.5px; line-height:1; }
+  .logo em { color:var(--g); font-style:normal; }
+  .logo-sub { font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; margin-top:3px; }
+  .badge { display:inline-flex; align-items:center; gap:5px; background:rgba(30,215,96,0.1); border:1px solid rgba(30,215,96,0.25); color:var(--g); font-size:10px; padding:4px 10px; border-radius:20px; letter-spacing:1px; }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--g); animation:blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* HOW-TO */
+  .howto { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:22px; }
+  .howto-step { background:var(--s1); padding:14px; }
+  .step-num { font-family:var(--display); font-size:32px; font-weight:700; color:var(--border); line-height:1; margin-bottom:5px; user-select:none; }
+  .step-title { font-size:11px; color:var(--g); font-weight:500; margin-bottom:3px; }
+  .step-desc { font-size:11px; color:var(--muted2); line-height:1.5; }
+  .step-desc a { color:var(--g); text-decoration:none; }
+
+  /* INPUT */
+  .input-section { background:var(--s1); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:16px; }
+  .input-tabs { display:flex; border-bottom:1px solid var(--border); }
+  .itab { flex:1; padding:11px 14px; background:none; border:none; color:var(--muted); font-family:var(--mono); font-size:12px; cursor:pointer; transition:all 0.2s; border-bottom:2px solid transparent; text-align:center; }
+  .itab.active { color:var(--g); border-bottom-color:var(--g); background:rgba(30,215,96,0.04); }
+  .input-body { padding:14px; }
+  textarea { width:100%; min-height:120px; background:var(--s2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--mono); font-size:12px; padding:10px 12px; resize:vertical; outline:none; transition:border-color 0.2s; line-height:1.5; }
+  textarea:focus { border-color:var(--g); }
+  textarea::placeholder { color:var(--muted); }
+  .input-hint { font-size:11px; color:var(--muted); margin-top:7px; line-height:1.6; }
+  .file-drop { border:2px dashed var(--border); border-radius:8px; padding:26px; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
+  .file-drop:hover, .file-drop.dragover { border-color:var(--g); background:rgba(30,215,96,0.04); }
+  .file-drop input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .file-drop-icon { font-size:26px; margin-bottom:6px; }
+  .file-drop-text { font-size:12px; color:var(--muted2); }
+  .file-drop-text strong { color:var(--g); }
+  #file-name { font-size:11px; color:var(--g); margin-top:5px; }
+
+  /* CONTROLS */
+  .controls-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  .n-control { display:flex; align-items:center; gap:8px; background:var(--s1); border:1px solid var(--border); border-radius:8px; padding:7px 12px; }
+  .n-control label { font-size:11px; color:var(--muted2); white-space:nowrap; }
+  input[type="number"] { width:68px; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:13px; padding:4px 8px; outline:none; text-align:center; }
+  input[type="number"]:focus { border-color:var(--g); }
+  .check-label { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted2); cursor:pointer; background:var(--s1); border:1px solid var(--border); border-radius:8px; padding:7px 12px; }
+  input[type="checkbox"] { accent-color:var(--g); }
+  .spacer { flex:1; }
+
+  /* BUTTONS */
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border-radius:7px; border:none; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:500; transition:all 0.15s; white-space:nowrap; }
+  .btn-green { background:var(--g); color:#000; font-weight:700; }
+  .btn-green:hover { background:#25f070; transform:translateY(-1px); }
+  .btn-green:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+  .btn-outline { background:transparent; color:var(--muted2); border:1px solid var(--border); }
+  .btn-outline:hover { color:var(--text); border-color:var(--muted); }
+  .btn-ghost { background:var(--s2); color:var(--muted2); border:1px solid var(--border); }
+  .btn-ghost:hover { color:var(--g); border-color:var(--g); }
+  .btn-red { background:rgba(232,64,64,0.1); color:var(--red); border:1px solid rgba(232,64,64,0.25); }
+  .btn-red:hover { background:rgba(232,64,64,0.18); }
+  .btn-amber { background:rgba(245,166,35,0.1); color:var(--amber); border:1px solid rgba(245,166,35,0.25); }
+  .btn-amber:hover { background:rgba(245,166,35,0.18); }
+  .btn-blue { background:rgba(59,142,234,0.1); color:var(--blue); border:1px solid rgba(59,142,234,0.25); }
+  .btn-blue:hover { background:rgba(59,142,234,0.18); }
+  .btn-sm { padding:5px 10px; font-size:11px; }
+
+  /* ERROR */
+  .error-msg { background:rgba(232,64,64,0.08); border:1px solid rgba(232,64,64,0.2); color:var(--red); border-radius:8px; padding:10px 14px; font-size:12px; margin-bottom:12px; display:none; }
+
+  /* RESULTS */
+  #results { display:none; }
+  .results-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-wrap:wrap; gap:10px; }
+  .results-title { font-family:var(--display); font-size:20px; font-weight:600; }
+  .results-meta { font-size:11px; color:var(--muted2); margin-top:2px; }
+  .action-row { display:flex; gap:7px; flex-wrap:wrap; }
+
+  /* DOWNLOAD DASHBOARD */
+  #dl-dashboard { background:var(--s1); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:16px; }
+  .dash-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:var(--s2); border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+  .dash-title { font-family:var(--display); font-size:16px; font-weight:600; }
+  .dash-controls { display:flex; gap:7px; flex-wrap:wrap; }
+
+  /* Stats */
+  .stats-row { display:grid; grid-template-columns:repeat(5,1fr); gap:1px; background:var(--border); border-bottom:1px solid var(--border); }
+  .stat-box { background:var(--s1); padding:12px 10px; text-align:center; }
+  .stat-val { font-family:var(--display); font-size:22px; font-weight:700; line-height:1; margin-bottom:4px; }
+  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+  .s-total .stat-val { color:var(--text); }
+  .s-done .stat-val { color:var(--g); }
+  .s-active .stat-val { color:var(--blue); }
+  .s-fail .stat-val { color:var(--red); }
+  .s-queue .stat-val { color:var(--muted2); }
+
+  /* Master progress */
+  .master-progress { padding:10px 18px; border-bottom:1px solid var(--border); }
+  .mp-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:11px; color:var(--muted2); }
+  .mp-pct { color:var(--g); font-weight:500; }
+  .progress-bar { height:4px; background:var(--border); border-radius:3px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--g),#25f070); border-radius:3px; transition:width 0.4s ease; }
+
+  /* SEARCH + FILTER */
+  .search-bar { position:relative; margin-bottom:10px; }
+  .search-bar input[type="text"] { width:100%; background:var(--s1); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:var(--mono); font-size:12px; padding:8px 12px 8px 32px; outline:none; transition:border-color 0.2s; }
+  .search-bar input[type="text"]:focus { border-color:var(--g); }
+  .search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:13px; pointer-events:none; }
+  .filter-tabs { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .ftab { background:var(--s1); border:1px solid var(--border); color:var(--muted2); font-family:var(--mono); font-size:11px; padding:4px 12px; border-radius:20px; cursor:pointer; transition:all 0.15s; }
+  .ftab.active { background:rgba(30,215,96,0.1); border-color:var(--g); color:var(--g); }
+
+  /* TRACK TABLE */
+  .track-table { background:var(--s1); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .track-head { display:grid; grid-template-columns:40px 1fr 130px 110px; padding:9px 14px; background:var(--s2); border-bottom:1px solid var(--border); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; gap:8px; }
+  .track-row { display:grid; grid-template-columns:40px 1fr 130px 110px; align-items:center; padding:8px 14px; border-bottom:1px solid rgba(37,37,37,0.6); transition:background 0.12s; animation:slideIn 0.18s ease both; gap:8px; }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:none} }
+  .track-row:last-child { border-bottom:none; }
+  .track-row:hover { background:var(--s2); }
+  .track-row.st-done { border-left:2px solid var(--g); }
+  .track-row.st-downloading { border-left:2px solid var(--blue); }
+  .track-row.st-failed { border-left:2px solid var(--red); }
+  .track-row.st-manual { border-left:2px solid var(--amber); }
+  .track-row.st-queued { border-left:2px solid transparent; }
+  .track-num { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .t-name { font-size:13px; color:var(--text); }
+  .t-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+  .track-dl-bar { height:2px; background:var(--border); border-radius:2px; margin-top:4px; overflow:hidden; display:none; }
+  .track-dl-fill { height:100%; background:var(--blue); border-radius:2px; animation:indeterminate 1.4s infinite; }
+  @keyframes indeterminate { 0%{transform:translateX(-100%);width:60%} 100%{transform:translateX(200%);width:60%} }
+
+  /* STATUS CHIPS */
+  .status-chip { display:inline-flex; align-items:center; gap:5px; font-size:10px; padding:3px 9px; border-radius:20px; font-weight:500; white-space:nowrap; }
+  .chip-queued { background:rgba(85,85,85,0.15); color:var(--muted2); border:1px solid var(--border); }
+  .chip-downloading { background:rgba(59,142,234,0.12); color:var(--blue); border:1px solid rgba(59,142,234,0.3); animation:chipPulse 1.2s infinite; }
+  .chip-done { background:rgba(30,215,96,0.12); color:var(--g); border:1px solid rgba(30,215,96,0.3); }
+  .chip-failed { background:rgba(232,64,64,0.1); color:var(--red); border:1px solid rgba(232,64,64,0.25); }
+  .chip-manual { background:rgba(245,166,35,0.1); color:var(--amber); border:1px solid rgba(245,166,35,0.25); }
+  @keyframes chipPulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* ROW ACTIONS */
+  .row-actions { display:flex; gap:5px; align-items:center; justify-content:flex-end; }
+  .icon-btn { background:none; border:1px solid transparent; color:var(--muted); cursor:pointer; font-size:13px; padding:3px 6px; border-radius:5px; transition:all 0.15s; font-family:var(--mono); }
+  .icon-btn:hover { background:var(--s3); border-color:var(--border); color:var(--text); }
+  .icon-btn.danger:hover { color:var(--red); border-color:rgba(232,64,64,0.3); }
+  .icon-btn.success:hover { color:var(--g); border-color:rgba(30,215,96,0.3); }
+
+  /* PAGINATION */
+  .pagination { display:flex; align-items:center; justify-content:center; gap:8px; padding:12px; border-top:1px solid var(--border); font-size:12px; color:var(--muted2); }
+  .page-btn { background:var(--s2); border:1px solid var(--border); color:var(--muted2); padding:4px 11px; border-radius:5px; cursor:pointer; font-family:var(--mono); font-size:11px; transition:all 0.15s; }
+  .page-btn:hover { border-color:var(--g); color:var(--g); }
+  .page-btn:disabled { opacity:0.3; cursor:default; }
+
+  /* YT-DLP GUIDE */
+  #dl-guide { display:none; background:var(--s1); border:1px solid rgba(245,166,35,0.2); border-radius:10px; padding:18px; margin-top:14px; }
+  .dl-guide-title { color:var(--amber); font-size:13px; font-weight:500; margin-bottom:10px; }
+  .dl-desc { font-size:11px; color:var(--muted2); line-height:1.7; margin-bottom:10px; }
+  .code-label { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:12px; margin-bottom:4px; }
+  .code-block { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:11px 13px; font-size:11px; color:var(--g); overflow-x:auto; white-space:pre; margin:4px 0; }
+  .copy-btn { background:var(--s3); border:1px solid var(--border); color:var(--muted2); font-family:var(--mono); font-size:10px; padding:2px 8px; border-radius:4px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .copy-btn:hover { border-color:var(--g); color:var(--g); }
+  .copy-btn.copied { border-color:var(--g); color:var(--g); }
+
+  /* EMPTY */
+  .empty { text-align:center; padding:40px 20px; color:var(--muted); font-size:12px; }
+  .empty-icon { font-size:32px; margin-bottom:8px; opacity:0.4; }
+
+  /* TOAST */
+  #toast { position:fixed; bottom:18px; right:18px; background:var(--s2); border:1px solid var(--g); color:var(--text); padding:9px 16px; border-radius:8px; font-size:12px; z-index:10000; opacity:0; transform:translateY(8px); transition:all 0.25s; pointer-events:none; max-width:280px; }
+  #toast.show { opacity:1; transform:none; }
+
+  @media (max-width:620px) {
+    .howto { grid-template-columns:1fr; }
+    .track-head, .track-row { grid-template-columns:36px 1fr 90px; }
+    .track-head .col-sh, .track-row .col-s { display:none; }
+    .stats-row { grid-template-columns:repeat(3,1fr); }
+    .controls-row, .action-row, .dash-controls { flex-direction:column; align-items:stretch; }
+    header { flex-direction:column; align-items:flex-start; gap:10px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="logo">Spo<em>track</em></div>
+      <div class="logo-sub">Playlist + Download Manager</div>
+    </div>
+    <div class="badge"><div class="dot"></div> No login required</div>
+  </header>
+
+  <div class="howto">
+    <div class="howto-step">
+      <div class="step-num">01</div>
+      <div class="step-title">Export from Exportify</div>
+      <div class="step-desc">Go to <a href="https://exportify.net" target="_blank">exportify.net</a> — free Spotify login — export Liked Songs or any playlist as CSV.</div>
+    </div>
+    <div class="howto-step">
+      <div class="step-num">02</div>
+      <div class="step-title">Paste or upload CSV</div>
+      <div class="step-desc">Drop the CSV or paste it. Also accepts plain text like <code style="color:var(--g)">Artist – Title</code> one per line.</div>
+    </div>
+    <div class="howto-step">
+      <div class="step-num">03</div>
+      <div class="step-title">Queue &amp; track downloads</div>
+      <div class="step-desc">Set N recent tracks. Start the queue — each track shows queued, downloading, done, or failed live.</div>
+    </div>
+  </div>
+
+  <div class="input-section">
+    <div class="input-tabs">
+      <button class="itab active" onclick="switchTab('csv')">📄 CSV File / Paste</button>
+      <button class="itab" onclick="switchTab('text')">✏️ Plain Text</button>
+    </div>
+    <div class="input-body">
+      <div id="tab-csv">
+        <div class="file-drop" id="file-drop">
+          <input type="file" accept=".csv,.txt" onchange="handleFile(this.files[0])">
+          <div class="file-drop-icon">📂</div>
+          <div class="file-drop-text">Drop <strong>CSV file</strong> here or tap to browse</div>
+          <div id="file-name"></div>
+        </div>
+        <div style="text-align:center;color:var(--muted);font-size:11px;padding:8px 0">— or paste below —</div>
+        <textarea id="csv-input" placeholder="Paste Exportify CSV here…
+Track Name,Artist Name(s),Album Name,Added At
+Blinding Lights,The Weeknd,After Hours,2024-01-15
+Levitating,Dua Lipa,Future Nostalgia,2024-01-10"></textarea>
+        <div class="input-hint">Exportify columns detected automatically.</div>
+      </div>
+      <div id="tab-text" style="display:none">
+        <textarea id="text-input" placeholder="One track per line — any format:
+1. Blinding Lights - The Weeknd
+Levitating – Dua Lipa
+Happier Than Ever · Billie Eilish"></textarea>
+        <div class="input-hint">Supports numbered lists, dashes, dots, em-dashes. Artist before or after title.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <div class="n-control">
+      <label>Most recent</label>
+      <input type="number" id="n-input" value="50" min="1" max="9999">
+      <label>tracks</label>
+    </div>
+    <label class="check-label">
+      <input type="checkbox" id="reverse-check"> Oldest first
+    </label>
+    <div class="spacer"></div>
+    <button class="btn btn-green" onclick="parse()">▶ Load Tracks</button>
+  </div>
+
+  <div class="error-msg" id="error-msg"></div>
+
+  <!-- RESULTS -->
+  <div id="results">
+
+    <div class="results-header">
+      <div>
+        <div class="results-title" id="results-title">Tracks</div>
+        <div class="results-meta" id="results-meta"></div>
+      </div>
+      <div class="action-row">
+        <button class="btn btn-ghost" onclick="copyList()">⎘ List</button>
+        <button class="btn btn-ghost" onclick="dlCSV()">↓ CSV</button>
+        <button class="btn btn-ghost" onclick="dlJSON()">↓ JSON</button>
+        <button class="btn btn-ghost" onclick="dlTXT()">↓ TXT</button>
+        <button class="btn btn-amber" onclick="toggleGuide()">⬇ yt-dlp Guide</button>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dl-dashboard">
+      <div class="dash-header">
+        <div class="dash-title">⬇ Download Queue</div>
+        <div class="dash-controls">
+          <button class="btn btn-green btn-sm" id="btn-start" onclick="startQueue()">▶ Start All</button>
+          <button class="btn btn-outline btn-sm" id="btn-pause" onclick="pauseQueue()" style="display:none">⏸ Pause</button>
+          <button class="btn btn-blue btn-sm" onclick="retryFailed()">↺ Retry Failed</button>
+          <button class="btn btn-ghost btn-sm" onclick="markAllDone()">✓ Mark All Done</button>
+          <button class="btn btn-red btn-sm" onclick="clearDone()">✕ Clear Done</button>
+        </div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box s-total"><div class="stat-val" id="stat-total">0</div><div class="stat-label">Total</div></div>
+        <div class="stat-box s-done"><div class="stat-val" id="stat-done">0</div><div class="stat-label">Done</div></div>
+        <div class="stat-box s-active"><div class="stat-val" id="stat-active">0</div><div class="stat-label">Active</div></div>
+        <div class="stat-box s-fail"><div class="stat-val" id="stat-fail">0</div><div class="stat-label">Failed</div></div>
+        <div class="stat-box s-queue"><div class="stat-val" id="stat-queue">0</div><div class="stat-label">Queued</div></div>
+      </div>
+      <div class="master-progress">
+        <div class="mp-row">
+          <span id="mp-label">Ready to download</span>
+          <span class="mp-pct" id="mp-pct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="master-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Filter tracks…" oninput="onSearch(this.value)">
+    </div>
+
+    <div class="filter-tabs">
+      <button class="ftab active" onclick="setStatusFilter('all',this)">All</button>
+      <button class="ftab" onclick="setStatusFilter('queued',this)">Queued</button>
+      <button class="ftab" onclick="setStatusFilter('downloading',this)">Downloading</button>
+      <button class="ftab" onclick="setStatusFilter('done',this)">Done</button>
+      <button class="ftab" onclick="setStatusFilter('manual',this)">Manual</button>
+      <button class="ftab" onclick="setStatusFilter('failed',this)">Failed</button>
+    </div>
+
+    <div class="track-table">
+      <div class="track-head">
+        <div>#</div>
+        <div>Track</div>
+        <div class="col-sh">Status</div>
+        <div style="text-align:right">Actions</div>
+      </div>
+      <div id="track-list"></div>
+      <div id="pagination" class="pagination" style="display:none"></div>
+    </div>
+
+    <!-- YT-DLP GUIDE -->
+    <div id="dl-guide">
+      <div class="dl-guide-title">⬇ Manual Download via yt-dlp</div>
+      <div class="dl-desc">Use this if the in-app downloader is blocked or rate-limited. yt-dlp finds the audio on YouTube and saves as MP3.</div>
+      <div class="code-label"><span>Install</span><button class="copy-btn" onclick="copyBlock('guide-install',this)">⎘ Copy</button></div>
+      <div class="code-block" id="guide-install">pip install yt-dlp                              # desktop
+pkg install python && pip install yt-dlp        # Termux/Android</div>
+      <div class="code-label"><span>Single track example</span><button class="copy-btn" onclick="copyBlock('guide-single',this)">⎘ Copy</button></div>
+      <div class="code-block" id="guide-single">Load tracks first to generate this command.</div>
+      <div class="code-label"><span>Batch script — all tracks</span><button class="copy-btn" onclick="copyDlScript(this)">⎘ Copy all</button></div>
+      <div class="code-block" id="guide-batch">Load tracks first.</div>
+      <div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="saveDlScript()">↓ Save as download.sh</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const STORAGE_KEY = 'spotrack_v3';
+let allTracks   = [];   // {id, name, artist, album, added, status}
+let filtered    = [];
+let statusFilter = 'all';
+let searchQ     = '';
+let currentPage = 1;
+const PAGE_SIZE = 80;
+let activeTab   = 'csv';
+let queueRunning = false;
+let queuePaused  = false;
+let dlScriptText = '';
+
+// ─────────────────────────────────────────────
+// PERSIST
+// ─────────────────────────────────────────────
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tracks: allTracks })); } catch(e) {}
+}
+
+function loadSaved() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (!s) return;
+    const data = JSON.parse(s);
+    if (data.tracks && data.tracks.length) {
+      allTracks = data.tracks;
+      applyFilter();
+      showResults(`${allTracks.length} Tracks`, 'Restored from last session');
+      updateStats();
+      buildDlScript();
+    }
+  } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────────
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.itab').forEach((t,i) => t.classList.toggle('active', ['csv','text'][i] === tab));
+  document.getElementById('tab-csv').style.display  = tab === 'csv'  ? 'block' : 'none';
+  document.getElementById('tab-text').style.display = tab === 'text' ? 'block' : 'none';
+}
+
+// ─────────────────────────────────────────────
+// FILE DROP
+// ─────────────────────────────────────────────
+const dropZone = document.getElementById('file-drop');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+function handleFile(file) {
+  if (!file) return;
+  document.getElementById('file-name').textContent = '✓ ' + file.name;
+  const r = new FileReader();
+  r.onload = e => { document.getElementById('csv-input').value = e.target.result; };
+  r.readAsText(file);
+}
+
+// ─────────────────────────────────────────────
+// PARSE + LOAD
+// ─────────────────────────────────────────────
+function parse() {
+  hideError();
+  const n       = parseInt(document.getElementById('n-input').value) || 50;
+  const reverse = document.getElementById('reverse-check').checked;
+  let tracks    = [];
+
+  if (activeTab === 'csv') {
+    const raw = document.getElementById('csv-input').value.trim();
+    if (!raw) return showError('Paste CSV text or upload a file first.');
+    tracks = parseCSV(raw);
+  } else {
+    const raw = document.getElementById('text-input').value.trim();
+    if (!raw) return showError('Paste a track list first.');
+    tracks = parseTextList(raw);
+  }
+
+  if (!tracks.length) return showError("Couldn't detect any tracks. Check the format.");
+
+  if (!reverse) tracks = tracks.reverse();
+  tracks = tracks.slice(0, n);
+
+  // Preserve existing statuses
+  const existing = {};
+  allTracks.forEach(t => { existing[tKey(t)] = t.status; });
+
+  allTracks = tracks.map((t, i) => ({ ...t, id: i, status: existing[tKey(t)] || 'queued' }));
+
+  statusFilter = 'all'; searchQ = '';
+  document.getElementById('search-input').value = '';
+  document.querySelectorAll('.ftab').forEach((b, i) => b.classList.toggle('active', i === 0));
+
+  applyFilter();
+  updateStats();
+  buildDlScript();
+  saveState();
+  showResults(`${allTracks.length} Track${allTracks.length !== 1 ? 's' : ''}`, `Most recent ${allTracks.length} tracks loaded`);
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function tKey(t) { return (t.name + '||' + (t.artist||'')).toLowerCase(); }
+
+function showResults(title, meta) {
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results-title').textContent = title;
+  document.getElementById('results-meta').textContent  = meta;
+}
+
+// ─────────────────────────────────────────────
+// CSV PARSER
+// ─────────────────────────────────────────────
+function parseCSV(raw) {
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  const header = parseCSVRow(lines[0]).map(h => h.toLowerCase().trim());
+  const idx = {
+    name:   findCol(header, ['track name','name','title','song']),
+    artist: findCol(header, ['artist name(s)','artist names','artist name','artist','artists']),
+    album:  findCol(header, ['album name','album']),
+    added:  findCol(header, ['added at','date added','added']),
+  };
+  const hasHeader = idx.name !== -1 || idx.artist !== -1;
+  const tracks = [];
+  for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
+    const cols = parseCSVRow(lines[i]);
+    if (!cols.length) continue;
+    const name   = (hasHeader && idx.name   !== -1 ? cols[idx.name]   : cols[0] || '').trim();
+    const artist = (hasHeader && idx.artist !== -1 ? cols[idx.artist]  : cols[1] || '').trim();
+    const album  = (hasHeader && idx.album  !== -1 ? cols[idx.album]   : '').trim();
+    const added  = (hasHeader && idx.added  !== -1 ? cols[idx.added]   : '').trim();
+    if (name) tracks.push({ name, artist, album, added: fmtDate(added) });
+  }
+  return tracks;
+}
+
+function findCol(header, candidates) {
+  for (const c of candidates) { const i = header.indexOf(c); if (i !== -1) return i; }
+  for (const c of candidates) { const i = header.findIndex(h => h.includes(c)); if (i !== -1) return i; }
+  return -1;
+}
+
+function parseCSVRow(line) {
+  const cols = []; let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cols.push(cur);
+  return cols.map(c => c.trim().replace(/^"|"$/g, ''));
+}
+
+function parseTextList(raw) {
+  return raw.split('\n').map(l => l.trim()).filter(Boolean).map(line => {
+    line = line.replace(/^[\d]+[\.\)\-:\s]+/, '').trim();
+    const parts = line.split(/\s+[-–—·|]\s+/);
+    let name = '', artist = '';
+    if (parts.length >= 2) { artist = parts[0].trim(); name = parts.slice(1).join(' - ').trim(); }
+    else name = line;
+    return { name, artist, album: '', added: '' };
+  }).filter(t => t.name);
+}
+
+// ─────────────────────────────────────────────
+// RENDER
+// ─────────────────────────────────────────────
+function onSearch(val) { searchQ = val; applyFilter(); }
+
+function setStatusFilter(s, btn) {
+  statusFilter = s;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = searchQ.toLowerCase();
+  filtered = allTracks.filter(t => {
+    const ms = statusFilter === 'all' || t.status === statusFilter;
+    const mq = !q || t.name.toLowerCase().includes(q) || (t.artist||'').toLowerCase().includes(q);
+    return ms && mq;
+  });
+  currentPage = 1;
+  renderList();
+}
+
+function renderList() {
+  const pages = Math.ceil(filtered.length / PAGE_SIZE);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const slice = filtered.slice(start, start + PAGE_SIZE);
+  const list  = document.getElementById('track-list');
+  list.innerHTML = '';
+
+  if (!slice.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">🔍</div>No tracks match.</div>';
+  } else {
+    slice.forEach((t, i) => {
+      const globalIdx = allTracks.indexOf(t);
+      list.appendChild(buildRow(t, start + i + 1, globalIdx));
+    });
+  }
+
+  const pg = document.getElementById('pagination');
+  if (pages > 1) {
+    pg.style.display = 'flex';
+    pg.innerHTML = `
+      <button class="page-btn" onclick="changePage(${currentPage-1})" ${currentPage===1?'disabled':''}>← Prev</button>
+      <span>Page ${currentPage} / ${pages}</span>
+      <button class="page-btn" onclick="changePage(${currentPage+1})" ${currentPage===pages?'disabled':''}>Next →</button>
+    `;
+  } else pg.style.display = 'none';
+}
+
+const CHIPS = {
+  queued:      '<span class="status-chip chip-queued">· Queued</span>',
+  downloading: '<span class="status-chip chip-downloading">↓ Downloading</span>',
+  done:        '<span class="status-chip chip-done">✓ Done</span>',
+  failed:      '<span class="status-chip chip-failed">✕ Failed</span>',
+  manual:      '<span class="status-chip chip-manual">✓ Manual</span>',
+};
+
+function buildRow(t, displayNum, idx) {
+  const row = document.createElement('div');
+  row.className = `track-row st-${t.status}`;
+  row.id = `row-${idx}`;
+  row.style.animationDelay = `${Math.min(displayNum - 1, 30) * 7}ms`;
+
+  const dlBar = t.status === 'downloading'
+    ? `<div class="track-dl-bar" style="display:block"><div class="track-dl-fill"></div></div>`
+    : `<div class="track-dl-bar"></div>`;
+
+  // Actions depend on status
+  let actions = '';
+  if (t.status === 'queued' || t.status === 'failed') {
+    actions += `<button class="icon-btn" title="Download now" onclick="downloadOne(${idx})">⬇</button>`;
+  }
+  if (t.status === 'done' || t.status === 'manual') {
+    actions += `<button class="icon-btn danger" title="Reset to queued" onclick="resetTrack(${idx})">↺</button>`;
+  } else {
+    actions += `<button class="icon-btn success" title="Mark done manually" onclick="markManual(${idx})">✓</button>`;
+  }
+  actions += `<button class="icon-btn" title="Copy yt-dlp command" onclick="copySingle(${idx})">⎘</button>`;
+
+  row.innerHTML = `
+    <div class="track-num">${displayNum}</div>
+    <div>
+      <div class="t-name">${esc(t.name)}</div>
+      <div class="t-sub">${esc(t.artist||'')}${t.album ? ' · ' + esc(t.album) : ''}</div>
+      ${dlBar}
+    </div>
+    <div class="col-s">${CHIPS[t.status] || ''}</div>
+    <div class="row-actions">${actions}</div>
+  `;
+  return row;
+}
+
+function refreshRow(idx) {
+  const existing = document.getElementById(`row-${idx}`);
+  if (!existing) return;
+  const num = parseInt(existing.querySelector('.track-num').textContent);
+  existing.replaceWith(buildRow(allTracks[idx], num, idx));
+}
+
+function changePage(p) {
+  currentPage = p;
+  renderList();
+  document.getElementById('track-list').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ─────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────
+function updateStats() {
+  let done = 0, active = 0, failed = 0, queued = 0;
+  allTracks.forEach(t => {
+    if (t.status === 'done' || t.status === 'manual') done++;
+    else if (t.status === 'downloading') active++;
+    else if (t.status === 'failed') failed++;
+    else queued++;
+  });
+  const total = allTracks.length;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  document.getElementById('stat-total').textContent  = total;
+  document.getElementById('stat-done').textContent   = done;
+  document.getElementById('stat-active').textContent = active;
+  document.getElementById('stat-fail').textContent   = failed;
+  document.getElementById('stat-queue').textContent  = queued;
+  document.getElementById('master-fill').style.width = pct + '%';
+  document.getElementById('mp-pct').textContent      = pct + '%';
+  document.getElementById('mp-label').textContent    = queueRunning
+    ? `Downloading… ${done} of ${total} complete`
+    : done === total && total > 0
+      ? '✓ All downloads complete!'
+      : `${queued} queued · ${failed} failed · ${done} done`;
+}
+
+// ─────────────────────────────────────────────
+// DOWNLOAD ENGINE
+// ─────────────────────────────────────────────
+async function fetchAudioUrl(track) {
+  const q = encodeURIComponent(`${track.name} ${track.artist} official audio`);
+
+  // Attempt 1: cobalt.tools
+  try {
+    const r = await fetch('https://co.wuk.sh/api/json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ url: `https://www.youtube.com/results?search_query=${q}`, isAudioOnly: true }),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.url) return d.url;
+    }
+  } catch(e) {}
+
+  // Attempt 2: generic yt-api proxy
+  try {
+    const r = await fetch(`https://yt-dlp-api.vercel.app/search?q=${q}&limit=1`, { signal: AbortSignal.timeout(10000) });
+    if (r.ok) {
+      const d = await r.json();
+      const vid = d?.items?.[0]?.id;
+      if (vid) {
+        const r2 = await fetch(`https://yt-dlp-api.vercel.app/download?url=https://youtube.com/watch?v=${vid}&format=mp3`, { signal: AbortSignal.timeout(12000) });
+        if (r2.ok) { const d2 = await r2.json(); if (d2.url) return d2.url; }
+      }
+    }
+  } catch(e) {}
+
+  throw new Error('All sources failed');
+}
+
+async function downloadOne(idx) {
+  const t = allTracks[idx];
+  if (t.status === 'downloading') return;
+  setStatus(idx, 'downloading');
+  try {
+    const url = await fetchAudioUrl(t);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${t.artist ? t.artist + ' - ' : ''}${t.name}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setStatus(idx, 'done');
+    toast(`✓ Downloaded: ${t.name}`);
+  } catch(e) {
+    setStatus(idx, 'failed');
+    toast(`✕ Failed: ${t.name} — use yt-dlp guide below`);
+  }
+}
+
+async function startQueue() {
+  if (queueRunning) return;
+  queueRunning = true; queuePaused = false;
+  document.getElementById('btn-start').style.display = 'none';
+  document.getElementById('btn-pause').style.display = 'inline-flex';
+  updateStats();
+
+  for (let i = 0; i < allTracks.length; i++) {
+    if (queuePaused || !queueRunning) break;
+    if (allTracks[i].status === 'queued') {
+      await downloadOne(i);
+      await sleep(900);
+    }
+  }
+
+  queueRunning = false;
+  document.getElementById('btn-start').style.display = 'inline-flex';
+  document.getElementById('btn-pause').style.display = 'none';
+  updateStats();
+}
+
+function pauseQueue() {
+  queuePaused = true; queueRunning = false;
+  document.getElementById('btn-start').style.display = 'inline-flex';
+  document.getElementById('btn-pause').style.display = 'none';
+  toast('⏸ Queue paused');
+  updateStats();
+}
+
+function retryFailed() {
+  let count = 0;
+  allTracks.forEach((t, i) => { if (t.status === 'failed') { allTracks[i].status = 'queued'; count++; } });
+  if (!count) return toast('No failed tracks to retry');
+  updateStats(); applyFilter(); saveState();
+  toast(`↺ ${count} tracks reset to queued`);
+}
+
+function markManual(idx) { setStatus(idx, 'manual'); toast('✓ Marked as done'); }
+function resetTrack(idx) { setStatus(idx, 'queued'); toast('↺ Reset to queued'); }
+
+function markAllDone() {
+  allTracks.forEach((t, i) => { if (t.status !== 'done') allTracks[i].status = 'manual'; });
+  updateStats(); applyFilter(); saveState();
+  toast('✓ All tracks marked as done');
+}
+
+function clearDone() {
+  const before = allTracks.length;
+  allTracks = allTracks.filter(t => t.status !== 'done' && t.status !== 'manual');
+  allTracks.forEach((t, i) => t.id = i);
+  updateStats(); applyFilter(); saveState();
+  toast(`Cleared ${before - allTracks.length} done tracks`);
+}
+
+function setStatus(idx, status) {
+  allTracks[idx].status = status;
+  updateStats();
+  refreshRow(idx);
+  saveState();
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ─────────────────────────────────────────────
+// EXPORTS
+// ─────────────────────────────────────────────
+function copyList() {
+  if (!allTracks.length) return;
+  copyText(allTracks.map((t, i) => `${i+1}. ${t.name}${t.artist ? ' — ' + t.artist : ''}`).join('\n'),
+    `✓ Copied ${allTracks.length} tracks`);
+}
+function dlCSV() {
+  if (!allTracks.length) return;
+  const rows = [['#','Title','Artist','Album','Added','Status']];
+  allTracks.forEach((t, i) => rows.push([i+1, csvE(t.name), csvE(t.artist), csvE(t.album), csvE(t.added), t.status]));
+  saveFile(rows.map(r => r.join(',')).join('\n'), 'tracks.csv', 'text/csv');
+  toast('✓ CSV saved');
+}
+function dlJSON() {
+  if (!allTracks.length) return;
+  saveFile(JSON.stringify(allTracks, null, 2), 'tracks.json', 'application/json');
+  toast('✓ JSON saved');
+}
+function dlTXT() {
+  if (!allTracks.length) return;
+  saveFile(allTracks.map((t, i) => `${i+1}. ${t.name}${t.artist ? ' — ' + t.artist : ''}`).join('\n'), 'tracks.txt', 'text/plain');
+  toast('✓ TXT saved');
+}
+function saveFile(content, name, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = name; a.click();
+}
+
+// ─────────────────────────────────────────────
+// YT-DLP GUIDE
+// ─────────────────────────────────────────────
+function buildDlScript() {
+  if (!allTracks.length) return;
+  const first = allTracks[0];
+  document.getElementById('guide-single').textContent =
+    `yt-dlp "ytsearch1:${first.name} ${first.artist}" -x --audio-format mp3 -o "%(title)s.%(ext)s"`;
+  const lines = allTracks.map(t =>
+    `yt-dlp "ytsearch1:${(t.name + ' ' + (t.artist||'')).replace(/"/g, "'")}" -x --audio-format mp3 -o "%(title)s.%(ext)s"`
+  );
+  dlScriptText = '#!/bin/bash\n# Generated by Spotrack\n\n' + lines.join('\n');
+  document.getElementById('guide-batch').textContent =
+    lines.slice(0, 3).join('\n') + (lines.length > 3 ? `\n… +${lines.length - 3} more commands` : '');
+}
+
+function copySingle(idx) {
+  const t = allTracks[idx];
+  const cmd = `yt-dlp "ytsearch1:${(t.name + ' ' + (t.artist||'')).replace(/"/g,"'")}" -x --audio-format mp3 -o "%(title)s.%(ext)s"`;
+  copyText(cmd, '⎘ yt-dlp command copied');
+}
+
+function toggleGuide() {
+  const el = document.getElementById('dl-guide');
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (el.style.display === 'block') el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function copyBlock(id, btn) {
+  const text = document.getElementById(id).textContent;
+  if (!text.trim()) return toast('⚠ Nothing to copy');
+  copyText(text, null); flashBtn(btn);
+}
+
+function copyDlScript(btn) {
+  if (!dlScriptText) return toast('⚠ Load tracks first');
+  copyText(dlScriptText, null);
+  if (btn) flashBtn(btn); else toast(`✓ Script copied (${allTracks.length} commands)`);
+}
+
+function saveDlScript() {
+  if (!dlScriptText) return toast('⚠ Load tracks first');
+  saveFile(dlScriptText, 'download.sh', 'text/plain');
+  toast('✓ download.sh saved');
+}
+
+function flashBtn(btn) {
+  const orig = btn.textContent;
+  btn.textContent = '✓ Copied'; btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+}
+
+// ─────────────────────────────────────────────
+// CLIPBOARD
+// ─────────────────────────────────────────────
+function copyText(text, msg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => { if (msg) toast(msg); }).catch(() => fallbackCopy(text, msg));
+  } else fallbackCopy(text, msg);
+}
+function fallbackCopy(text, msg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { const ok = document.execCommand('copy'); if (msg) toast(ok ? msg : '⚠ Copy failed'); }
+  catch { toast('⚠ Copy unsupported — use download button'); }
+  document.body.removeChild(ta);
+}
+
+// ─────────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────────
+function fmtDate(s) {
+  if (!s) return '';
+  try { const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'2-digit'}); }
+  catch { return s; }
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function csvE(s) { s = String(s||'').replace(/"/g,'""'); return (s.includes(',')||s.includes('"')||s.includes('\n')) ? `"${s}"` : s; }
+function showError(m) { const e = document.getElementById('error-msg'); e.textContent = m; e.style.display = 'block'; }
+function hideError() { document.getElementById('error-msg').style.display = 'none'; }
+
+let toastT;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ─────────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────────
+loadSaved();
+</script>
+</body>
+</html>
