@@ -131,8 +131,9 @@
   .track-row:last-child { border-bottom:none; }
   .track-row:hover { background:var(--s2); }
   .track-row.st-done { border-left:2px solid var(--g); }
+  .track-row.st-fetching { border-left:2px solid #bb86fc; }
   .track-row.st-downloading { border-left:2px solid var(--blue); }
-  .track-row.st-failed { border-left:2px solid var(--red); }
+  .track-row.st-failed { border-left:2px solid var(--red); cursor:pointer; }
   .track-row.st-manual { border-left:2px solid var(--amber); }
   .track-row.st-queued { border-left:2px solid transparent; }
   .track-num { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
@@ -145,6 +146,7 @@
   /* STATUS CHIPS */
   .status-chip { display:inline-flex; align-items:center; gap:5px; font-size:10px; padding:3px 9px; border-radius:20px; font-weight:500; white-space:nowrap; }
   .chip-queued { background:rgba(85,85,85,0.15); color:var(--muted2); border:1px solid var(--border); }
+  .chip-fetching { background:rgba(187, 134, 252, 0.12); color:#bb86fc; border:1px solid rgba(187, 134, 252, 0.3); animation:chipPulse 1.2s infinite; }
   .chip-downloading { background:rgba(59,142,234,0.12); color:var(--blue); border:1px solid rgba(59,142,234,0.3); animation:chipPulse 1.2s infinite; }
   .chip-done { background:rgba(30,215,96,0.12); color:var(--g); border:1px solid rgba(30,215,96,0.3); }
   .chip-failed { background:rgba(232,64,64,0.1); color:var(--red); border:1px solid rgba(232,64,64,0.25); }
@@ -261,7 +263,24 @@ Happier Than Ever · Billie Eilish"></textarea>
       <input type="checkbox" id="reverse-check"> Oldest first
     </label>
     <div class="spacer"></div>
+    <button class="btn btn-outline" onclick="toggleSettings()">⚙ Settings</button>
     <button class="btn btn-green" onclick="parse()">▶ Load Tracks</button>
+  </div>
+
+  <div id="settings-pane" style="display:none; background:var(--s1); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:16px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
+        <label>Cobalt Instance</label>
+        <input type="text" id="cobalt-url" value="https://co.wuk.sh" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+      </div>
+      <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
+        <label>Delay (ms)</label>
+        <input type="number" id="dl-delay" value="2000" min="500" max="10000" style="width:100%;">
+      </div>
+    </div>
+    <div style="margin-top:10px; font-size:10px; color:var(--muted);">
+      Pro tip: Use a custom Cobalt instance if the default is down. Increase delay if you get rate-limited.
+    </div>
   </div>
 
   <div class="error-msg" id="error-msg"></div>
@@ -377,7 +396,17 @@ let dlScriptText = '';
 // PERSIST
 // ─────────────────────────────────────────────
 function saveState() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tracks: allTracks })); } catch(e) {}
+  try {
+    const data = JSON.stringify({ tracks: allTracks });
+    if (data.length > 4000000) { // ~4MB
+      toast('⚠ Storage nearly full! Clear some tracks.');
+    }
+    localStorage.setItem(STORAGE_KEY, data);
+  } catch(e) {
+    if (e.name === 'QuotaExceededError') {
+      showError('Browser storage full! Please click "Clear Done" to make room.');
+    }
+  }
 }
 
 function loadSaved() {
@@ -393,6 +422,14 @@ function loadSaved() {
       buildDlScript();
     }
   } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
+// UI TOGGLES
+// ─────────────────────────────────────────────
+function toggleSettings() {
+  const p = document.getElementById('settings-pane');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
 }
 
 // ─────────────────────────────────────────────
@@ -581,9 +618,10 @@ function renderList() {
 
 const CHIPS = {
   queued:      '<span class="status-chip chip-queued">· Queued</span>',
+  fetching:    '<span class="status-chip chip-fetching">🔍 Fetching</span>',
   downloading: '<span class="status-chip chip-downloading">↓ Downloading</span>',
   done:        '<span class="status-chip chip-done">✓ Done</span>',
-  failed:      '<span class="status-chip chip-failed">✕ Failed</span>',
+  failed:      '<span class="status-chip chip-failed" onclick="onFailedClick(event, ##IDX##)">✕ Failed</span>',
   manual:      '<span class="status-chip chip-manual">✓ Manual</span>',
 };
 
@@ -592,22 +630,23 @@ function buildRow(t, displayNum, idx) {
   row.className = `track-row st-${t.status}`;
   row.id = `row-${idx}`;
   row.style.animationDelay = `${Math.min(displayNum - 1, 30) * 7}ms`;
+  if (t.status === 'failed') row.onclick = (e) => onFailedClick(e, idx);
 
-  const dlBar = t.status === 'downloading'
-    ? `<div class="track-dl-bar" style="display:block"><div class="track-dl-fill"></div></div>`
+  const dlBar = (t.status === 'downloading' || t.status === 'fetching')
+    ? `<div class="track-dl-bar" style="display:block"><div class="track-dl-fill" style="${t.status==='fetching'?'background:#bb86fc':''}"></div></div>`
     : `<div class="track-dl-bar"></div>`;
 
   // Actions depend on status
   let actions = '';
   if (t.status === 'queued' || t.status === 'failed') {
-    actions += `<button class="icon-btn" title="Download now" onclick="downloadOne(${idx})">⬇</button>`;
+    actions += `<button class="icon-btn" title="Download now" onclick="event.stopPropagation(); downloadOne(${idx})">⬇</button>`;
   }
   if (t.status === 'done' || t.status === 'manual') {
-    actions += `<button class="icon-btn danger" title="Reset to queued" onclick="resetTrack(${idx})">↺</button>`;
+    actions += `<button class="icon-btn danger" title="Reset to queued" onclick="event.stopPropagation(); resetTrack(${idx})">↺</button>`;
   } else {
-    actions += `<button class="icon-btn success" title="Mark done manually" onclick="markManual(${idx})">✓</button>`;
+    actions += `<button class="icon-btn success" title="Mark done manually" onclick="event.stopPropagation(); markManual(${idx})">✓</button>`;
   }
-  actions += `<button class="icon-btn" title="Copy yt-dlp command" onclick="copySingle(${idx})">⎘</button>`;
+  actions += `<button class="icon-btn" title="Copy yt-dlp command" onclick="event.stopPropagation(); copySingle(${idx})">⎘</button>`;
 
   row.innerHTML = `
     <div class="track-num">${displayNum}</div>
@@ -616,7 +655,7 @@ function buildRow(t, displayNum, idx) {
       <div class="t-sub">${esc(t.artist||'')}${t.album ? ' · ' + esc(t.album) : ''}</div>
       ${dlBar}
     </div>
-    <div class="col-s">${CHIPS[t.status] || ''}</div>
+    <div class="col-s">${CHIPS[t.status].replace('##IDX##', idx) || ''}</div>
     <div class="row-actions">${actions}</div>
   `;
   return row;
@@ -642,7 +681,7 @@ function updateStats() {
   let done = 0, active = 0, failed = 0, queued = 0;
   allTracks.forEach(t => {
     if (t.status === 'done' || t.status === 'manual') done++;
-    else if (t.status === 'downloading') active++;
+    else if (t.status === 'downloading' || t.status === 'fetching') active++;
     else if (t.status === 'failed') failed++;
     else queued++;
   });
@@ -666,69 +705,118 @@ function updateStats() {
 // ─────────────────────────────────────────────
 // DOWNLOAD ENGINE
 // ─────────────────────────────────────────────
-async function fetchAudioUrl(track) {
-  const q = encodeURIComponent(`${track.name} ${track.artist} official audio`);
+async function searchYoutube(track) {
+  const q = `${track.name} ${track.artist}`.toLowerCase();
+  const searchUrls = [
+    `https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(q)}&filter=videos`,
+    `https://invidious.v6.rocks/api/v1/search?q=${encodeURIComponent(q)}&type=video`
+  ];
 
-  // Attempt 1: cobalt.tools
+  for (const url of searchUrls) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) continue;
+      const data = await r.json();
+      const results = data.items || data; // Piped uses .items, Invidious is array
+      if (!Array.isArray(results) || !results.length) continue;
+
+      // Try to find the best match (official audio/video)
+      let best = results[0];
+      const keywords = ['official audio', 'official video', 'topic', 'hq'];
+      for (const res of results.slice(0, 5)) {
+        const title = (res.title || '').toLowerCase();
+        if (keywords.some(k => title.includes(k)) && title.includes(track.name.toLowerCase())) {
+          best = res;
+          break;
+        }
+      }
+      const id = best.videoId || best.id;
+      if (id) return `https://www.youtube.com/watch?v=${id}`;
+    } catch(e) {}
+  }
+  return null;
+}
+
+async function fetchAudioUrl(track) {
+  const ytUrl = await searchYoutube(track);
+  if (!ytUrl) throw new Error('Could not find track on YouTube');
+
+  const cobaltBase = document.getElementById('cobalt-url').value.replace(/\/$/, '');
+
+  // Attempt Cobalt
   try {
-    const r = await fetch('https://co.wuk.sh/api/json', {
+    const r = await fetch(`${cobaltBase}/api/json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ url: `https://www.youtube.com/results?search_query=${q}`, isAudioOnly: true }),
-      signal: AbortSignal.timeout(12000)
+      body: JSON.stringify({ url: ytUrl, isAudioOnly: true, aFormat: 'mp3' }),
+      signal: AbortSignal.timeout(15000)
     });
     if (r.ok) {
       const d = await r.json();
       if (d.url) return d.url;
+      if (d.status === 'redirect' && d.url) return d.url;
     }
-  } catch(e) {}
+  } catch(e) { console.warn('Cobalt failed', e); }
 
-  // Attempt 2: generic yt-api proxy
+  // Fallback: yt-dlp-api (if available)
   try {
-    const r = await fetch(`https://yt-dlp-api.vercel.app/search?q=${q}&limit=1`, { signal: AbortSignal.timeout(10000) });
-    if (r.ok) {
-      const d = await r.json();
-      const vid = d?.items?.[0]?.id;
-      if (vid) {
-        const r2 = await fetch(`https://yt-dlp-api.vercel.app/download?url=https://youtube.com/watch?v=${vid}&format=mp3`, { signal: AbortSignal.timeout(12000) });
-        if (r2.ok) { const d2 = await r2.json(); if (d2.url) return d2.url; }
-      }
-    }
+    const r = await fetch(`https://yt-dlp-api.vercel.app/download?url=${encodeURIComponent(ytUrl)}&format=mp3`, { signal: AbortSignal.timeout(15000) });
+    if (r.ok) { const d = await r.json(); if (d.url) return d.url; }
   } catch(e) {}
 
-  throw new Error('All sources failed');
+  throw new Error('Conversion service failed');
 }
 
 async function downloadOne(idx) {
   const t = allTracks[idx];
-  if (t.status === 'downloading') return;
-  setStatus(idx, 'downloading');
+  if (t.status === 'fetching' || t.status === 'downloading') return;
+
+  setStatus(idx, 'fetching');
   try {
-    const url = await fetchAudioUrl(t);
+    const downloadUrl = await fetchAudioUrl(t);
+
+    setStatus(idx, 'downloading');
     const a = document.createElement('a');
-    a.href = url;
+    a.href = downloadUrl;
+    // Note: Most browsers ignore 'download' attribute on cross-origin URLs unless headers allow it
     a.download = `${t.artist ? t.artist + ' - ' : ''}${t.name}.mp3`.replace(/[/\\?%*:|"<>]/g, '');
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Give some time for the browser to trigger the download prompt
+    await sleep(1500);
     setStatus(idx, 'done');
-    toast(`✓ Downloaded: ${t.name}`);
+    toast(`✓ Triggered: ${t.name}`);
   } catch(e) {
+    console.error(e);
     setStatus(idx, 'failed');
-    toast(`✕ Failed: ${t.name} — use yt-dlp guide below`);
+    toast(`✕ Failed: ${t.name} — ${e.message}`);
   }
 }
 
 async function startQueue() {
   if (queueRunning) return;
+
+  // Browser download block check (heuristic)
+  if (!localStorage.getItem('download_check_done')) {
+    const ok = confirm("Spotrack will trigger multiple downloads. If they stop, please check your browser's address bar for a 'Downloads blocked' icon and select 'Always allow'.\n\nContinue?");
+    if (!ok) return;
+    localStorage.setItem('download_check_done', '1');
+  }
+
   queueRunning = true; queuePaused = false;
   document.getElementById('btn-start').style.display = 'none';
   document.getElementById('btn-pause').style.display = 'inline-flex';
   updateStats();
 
+  const delay = parseInt(document.getElementById('dl-delay').value) || 2000;
+
   for (let i = 0; i < allTracks.length; i++) {
     if (queuePaused || !queueRunning) break;
     if (allTracks[i].status === 'queued') {
       await downloadOne(i);
-      await sleep(900);
+      if (i < allTracks.length - 1) await sleep(delay);
     }
   }
 
@@ -756,6 +844,12 @@ function retryFailed() {
 
 function markManual(idx) { setStatus(idx, 'manual'); toast('✓ Marked as done'); }
 function resetTrack(idx) { setStatus(idx, 'queued'); toast('↺ Reset to queued'); }
+function onFailedClick(e, idx) {
+  e.stopPropagation();
+  toggleGuide();
+  copySingle(idx);
+  toast('📋 Copied yt-dlp command for manual download');
+}
 
 function markAllDone() {
   allTracks.forEach((t, i) => { if (t.status !== 'done') allTracks[i].status = 'manual'; });
