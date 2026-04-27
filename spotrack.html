@@ -125,8 +125,8 @@
 
   /* TRACK TABLE */
   .track-table { background:var(--s1); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .track-head { display:grid; grid-template-columns:40px 1fr 130px 110px; padding:9px 14px; background:var(--s2); border-bottom:1px solid var(--border); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; gap:8px; }
-  .track-row { display:grid; grid-template-columns:40px 1fr 130px 110px; align-items:center; padding:8px 14px; border-bottom:1px solid rgba(37,37,37,0.6); transition:background 0.12s; animation:slideIn 0.18s ease both; gap:8px; }
+  .track-head { display:grid; grid-template-columns:40px 48px 1fr 130px 110px; padding:9px 14px; background:var(--s2); border-bottom:1px solid var(--border); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; gap:8px; }
+  .track-row { display:grid; grid-template-columns:40px 48px 1fr 130px 110px; align-items:center; padding:8px 14px; border-bottom:1px solid rgba(37,37,37,0.6); transition:background 0.12s; animation:slideIn 0.18s ease both; gap:8px; }
   @keyframes slideIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:none} }
   .track-row:last-child { border-bottom:none; }
   .track-row:hover { background:var(--s2); }
@@ -139,6 +139,7 @@
   .track-num { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
   .t-name { font-size:13px; color:var(--text); }
   .t-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+  .t-thumb { width:40px; height:40px; border-radius:4px; background:var(--s3); object-fit:cover; border:1px solid var(--border); }
   .track-dl-bar { height:2px; background:var(--border); border-radius:2px; margin-top:4px; overflow:hidden; display:none; }
   .track-dl-fill { height:100%; background:var(--blue); border-radius:2px; animation:indeterminate 1.4s infinite; }
   @keyframes indeterminate { 0%{transform:translateX(-100%);width:60%} 100%{transform:translateX(200%);width:60%} }
@@ -271,11 +272,11 @@ Happier Than Ever · Billie Eilish"></textarea>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>Cobalt Instance (Downloader)</label>
-        <input type="text" id="cobalt-url" value="https://co.wuk.sh" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+        <input type="text" id="cobalt-url" value="http://localhost:5000" placeholder="https://api.cobalt.tools" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
       </div>
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>Search API (Piped/Invidious)</label>
-        <input type="text" id="search-url" value="https://pipedapi.kavin.rocks" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+        <input type="text" id="search-url" value="https://api.piped.private.coffee" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
       </div>
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>CORS Proxy (Optional)</label>
@@ -368,6 +369,7 @@ Happier Than Ever · Billie Eilish"></textarea>
     <div class="track-table">
       <div class="track-head">
         <div>#</div>
+        <div style="text-align:center">Art</div>
         <div>Track</div>
         <div class="col-sh">Status</div>
         <div style="text-align:right">Actions</div>
@@ -443,8 +445,8 @@ function loadSaved() {
     if (!s) return;
     const data = JSON.parse(s);
     if (data.config) {
-      document.getElementById('cobalt-url').value = data.config.cobalt || 'https://co.wuk.sh';
-      document.getElementById('search-url').value = data.config.search || 'https://pipedapi.kavin.rocks';
+      document.getElementById('cobalt-url').value = data.config.cobalt || 'http://localhost:5000';
+      document.getElementById('search-url').value = data.config.search || 'https://api.piped.private.coffee';
       document.getElementById('cors-proxy').value = data.config.cors || '';
       document.getElementById('direct-search-mode').checked = !!data.config.direct;
       document.getElementById('dl-delay').value = data.config.delay || '2000';
@@ -562,12 +564,17 @@ function parseCSV(raw) {
   const tracks = [];
   for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
     const cols = parseCSVRow(lines[i]);
-    if (!cols.length) continue;
-    const name   = (hasHeader && idx.name   !== -1 ? cols[idx.name]   : cols[0] || '').trim();
-    const artist = (hasHeader && idx.artist !== -1 ? cols[idx.artist]  : cols[1] || '').trim();
-    const album  = (hasHeader && idx.album  !== -1 ? cols[idx.album]   : '').trim();
-    const added  = (hasHeader && idx.added  !== -1 ? cols[idx.added]   : '').trim();
-    if (name) tracks.push({ name, artist, album, added: fmtDate(added) });
+    if (!cols.length || (cols.length === 1 && !cols[0])) continue;
+
+    try {
+      const name   = (hasHeader && idx.name   !== -1 ? cols[idx.name]   : cols[0] || '').trim();
+      const artist = (hasHeader && idx.artist !== -1 ? cols[idx.artist]  : cols[1] || '').trim();
+      const album  = (hasHeader && idx.album  !== -1 ? cols[idx.album]   : cols[2] || '').trim();
+      const added  = (hasHeader && idx.added  !== -1 ? cols[idx.added]   : cols[3] || '').trim();
+      if (name) tracks.push({ name, artist, album, added: fmtDate(added) });
+    } catch(e) {
+      console.warn('Failed to parse CSV row', i, e);
+    }
   }
   return tracks;
 }
@@ -582,12 +589,20 @@ function parseCSVRow(line) {
   const cols = []; let cur = '', inQ = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
-    if (ch === '"') { if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    }
     else if (ch === ',' && !inQ) { cols.push(cur); cur = ''; }
     else cur += ch;
   }
   cols.push(cur);
-  return cols.map(c => c.trim().replace(/^"|"$/g, ''));
+  // Remove wrapping quotes only if they exist on both ends
+  return cols.map(c => {
+    c = c.trim();
+    if (c.startsWith('"') && c.endsWith('"')) return c.slice(1, -1);
+    return c;
+  });
 }
 
 function parseTextList(raw) {
@@ -683,8 +698,11 @@ function buildRow(t, displayNum, idx) {
   }
   actions += `<button class="icon-btn" title="Copy yt-dlp command" onclick="event.stopPropagation(); copySingle(${idx})">⎘</button>`;
 
+  const thumbUrl = t.thumb || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%23252525%22/%3E%3C/svg%3E';
+
   row.innerHTML = `
     <div class="track-num">${displayNum}</div>
+    <div style="display:flex;justify-content:center"><img src="${thumbUrl}" class="t-thumb" loading="lazy"></div>
     <div>
       <div class="t-name">${esc(t.name)}</div>
       <div class="t-sub">${esc(t.artist||'')}${t.album ? ' · ' + esc(t.album) : ''}</div>
@@ -775,6 +793,12 @@ async function searchYoutube(track, idx) {
         if (corsProxy) return fetch(corsProxy + url, { signal: AbortSignal.timeout(6000) });
         throw err;
       });
+
+      // Fallback to proxy on status error if not already proxied
+      if (!r.ok && corsProxy && !url.startsWith(corsProxy)) {
+        r = await fetch(corsProxy + url, { signal: AbortSignal.timeout(6000) }).catch(() => r);
+      }
+
       if (!r.ok) continue;
 
       const data = await r.json();
@@ -800,7 +824,10 @@ async function searchYoutube(track, idx) {
       }
 
       const id = best.videoId || best.id;
-      if (id) return (id.includes('http')) ? id : `https://www.youtube.com/watch?v=${id}`;
+      if (id) {
+        if (best.thumbnail) track.thumb = best.thumbnail;
+        return (id.includes('http')) ? id : `https://www.youtube.com/watch?v=${id}`;
+      }
     } catch(e) {
       console.warn(`Search instance failed: ${url}`, e);
     }
@@ -808,7 +835,7 @@ async function searchYoutube(track, idx) {
   return null;
 }
 
-async function fetchAudioUrl(ytUrl) {
+async function fetchAudioUrl(ytUrl, idx) {
   const cobaltBase = document.getElementById('cobalt-url').value.replace(/\/$/, '');
 
   // Attempt Cobalt
@@ -821,8 +848,20 @@ async function fetchAudioUrl(ytUrl) {
     });
     if (r.ok) {
       const d = await r.json();
+      if (d.thumbnail && !allTracks[idx].thumb) {
+        allTracks[idx].thumb = d.thumbnail;
+        refreshRow(idx);
+      }
       if (d.url) return d.url;
       if (d.status === 'redirect' && d.url) return d.url;
+    } else {
+      const d = await r.json().catch(() => ({}));
+      if (d.error && d.error.code === 'error.api.auth.jwt.missing') {
+        throw new Error('This Cobalt instance requires authentication (JWT). Try another one or the Local Bridge.');
+      }
+      if (d.text && d.text.includes('v7 api has been shut down')) {
+        throw new Error('This Cobalt instance is running an obsolete API version.');
+      }
     }
   } catch(e) { console.warn('Cobalt failed', e); }
 
@@ -859,7 +898,7 @@ async function downloadOne(idx) {
     let downloadUrl = null;
     if (ytUrl) {
       updateTrackLabel(idx, '⚙️ Converting...');
-      downloadUrl = await fetchAudioUrl(ytUrl);
+      downloadUrl = await fetchAudioUrl(ytUrl, idx);
     }
 
     // Fallback: If search failed, try sending the track name directly to Cobalt
