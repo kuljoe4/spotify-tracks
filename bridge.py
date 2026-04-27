@@ -18,12 +18,16 @@ def cobalt_mock():
     try:
         # Use yt-dlp to get the direct audio URL
         # We use -g to get the URL without downloading
-        cmd = [
-            "yt-dlp",
-            "-f", "bestaudio",
-            "-g",
-            url
-        ]
+        if "youtube.com/results" in url or "ytsearch1:" in url:
+            # For searches, ensure we use a generic extractor if it's a search URL
+            cmd = ["yt-dlp", "-f", "bestaudio", "-g", f"{url}"]
+        else:
+            cmd = [
+                "yt-dlp",
+                "-f", "bestaudio",
+                "-g",
+                url
+            ]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         direct_url = result.stdout.strip()
 
