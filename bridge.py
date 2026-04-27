@@ -1,10 +1,13 @@
 import os
 import subprocess
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import uuid
+from flask import Flask, request, jsonify, send_file
 
-app = Flask(__name__)
-CORS(app)
+app = Flask(__name__, static_folder='.')
+
+@app.route('/')
+def index():
+    return send_file('spotrack.html')
 
 @app.route('/api/json', methods=['POST'])
 def cobalt_mock():
@@ -13,38 +16,36 @@ def cobalt_mock():
     if not url:
         return jsonify({"status": "error", "text": "No URL provided"}), 400
 
-    print(f"[*] Processing: {url}")
+    if "youtube.com/results?search_query=" in url:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query).get('search_query', [None])[0]
+        if query:
+            url = f"ytsearch1:{query}"
 
+    print(f"[*] Downloading: {url}")
+    
+    filename = f"downloads/{uuid.uuid4()}.mp3"
     try:
-        # Use yt-dlp to get the direct audio URL
-        # We use -g to get the URL without downloading
-        cmd = ["yt-dlp", "-f", "bestaudio", "-g", url]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        # yt-dlp -g can return multiple URLs (e.g. for different formats), we take the first one
-        direct_url = result.stdout.strip().split('\n')[0]
-
-        # Extract Video ID for thumbnail
-        video_id = None
-        if "watch?v=" in url:
-            import re
-            match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
-            if match:
-                video_id = match.group(1)
-        elif "youtu.be/" in url:
-            video_id = url.split("/")[-1].split("?")[0]
-
+        # Download and convert to mp3
+        cmd = ["yt-dlp", "-f", "bestaudio", "-x", "--audio-format", "mp3", "-o", filename, url]
+        subprocess.run(cmd, check=True)
+        
+        # In a real app we'd return a URL to the file, but here we can just return the path for the UI to request
+        # Actually, let's just return the filename and add a /download route.
         return jsonify({
             "status": "stream",
-            "url": direct_url,
-            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
+            "url": f"/download/{os.path.basename(filename)}",
+            "thumbnail": None
         })
     except Exception as e:
         print(f"[!] Error: {e}")
         return jsonify({"status": "error", "text": str(e)}), 500
 
+@app.route('/download/<filename>')
+def serve_file(filename):
+    return send_file(os.path.join('downloads', filename))
+
 if __name__ == '__main__':
-    print("--- Spotrack Local Bridge ---")
-    print("This script allows Spotrack to use your local yt-dlp installation.")
-    print("Keep this running and set 'Cobalt Instance' in Spotrack to: http://localhost:5000")
-    print("-----------------------------")
+    if not os.path.exists('downloads'): os.makedirs('downloads')
     app.run(port=5000)
