@@ -18,22 +18,25 @@ def cobalt_mock():
     try:
         # Use yt-dlp to get the direct audio URL
         # We use -g to get the URL without downloading
-        if "youtube.com/results" in url or "ytsearch1:" in url:
-            # For searches, ensure we use a generic extractor if it's a search URL
-            cmd = ["yt-dlp", "-f", "bestaudio", "-g", f"{url}"]
-        else:
-            cmd = [
-                "yt-dlp",
-                "-f", "bestaudio",
-                "-g",
-                url
-            ]
+        cmd = ["yt-dlp", "-f", "bestaudio", "-g", url]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        direct_url = result.stdout.strip()
+        # yt-dlp -g can return multiple URLs (e.g. for different formats), we take the first one
+        direct_url = result.stdout.strip().split('\n')[0]
+
+        # Extract Video ID for thumbnail
+        video_id = None
+        if "watch?v=" in url:
+            import re
+            match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
+            if match:
+                video_id = match.group(1)
+        elif "youtu.be/" in url:
+            video_id = url.split("/")[-1].split("?")[0]
 
         return jsonify({
             "status": "stream",
-            "url": direct_url
+            "url": direct_url,
+            "thumbnail": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
         })
     except Exception as e:
         print(f"[!] Error: {e}")

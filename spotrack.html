@@ -125,8 +125,8 @@
 
   /* TRACK TABLE */
   .track-table { background:var(--s1); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-  .track-head { display:grid; grid-template-columns:40px 1fr 130px 110px; padding:9px 14px; background:var(--s2); border-bottom:1px solid var(--border); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; gap:8px; }
-  .track-row { display:grid; grid-template-columns:40px 1fr 130px 110px; align-items:center; padding:8px 14px; border-bottom:1px solid rgba(37,37,37,0.6); transition:background 0.12s; animation:slideIn 0.18s ease both; gap:8px; }
+  .track-head { display:grid; grid-template-columns:40px 48px 1fr 130px 110px; padding:9px 14px; background:var(--s2); border-bottom:1px solid var(--border); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; gap:8px; }
+  .track-row { display:grid; grid-template-columns:40px 48px 1fr 130px 110px; align-items:center; padding:8px 14px; border-bottom:1px solid rgba(37,37,37,0.6); transition:background 0.12s; animation:slideIn 0.18s ease both; gap:8px; }
   @keyframes slideIn { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:none} }
   .track-row:last-child { border-bottom:none; }
   .track-row:hover { background:var(--s2); }
@@ -139,6 +139,7 @@
   .track-num { font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
   .t-name { font-size:13px; color:var(--text); }
   .t-sub { font-size:10px; color:var(--muted); margin-top:2px; }
+  .t-thumb { width:40px; height:40px; border-radius:4px; background:var(--s3); object-fit:cover; border:1px solid var(--border); }
   .track-dl-bar { height:2px; background:var(--border); border-radius:2px; margin-top:4px; overflow:hidden; display:none; }
   .track-dl-fill { height:100%; background:var(--blue); border-radius:2px; animation:indeterminate 1.4s infinite; }
   @keyframes indeterminate { 0%{transform:translateX(-100%);width:60%} 100%{transform:translateX(200%);width:60%} }
@@ -271,7 +272,7 @@ Happier Than Ever · Billie Eilish"></textarea>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>Cobalt Instance (Downloader)</label>
-        <input type="text" id="cobalt-url" value="https://api.cobalt.tools" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
+        <input type="text" id="cobalt-url" value="http://localhost:5000" placeholder="https://api.cobalt.tools" style="width:100%; background:var(--s2); border:1px solid var(--border); border-radius:5px; color:var(--text); font-family:var(--mono); font-size:12px; padding:6px 10px;">
       </div>
       <div class="n-control" style="flex-direction:column; align-items:flex-start; gap:4px; height:auto;">
         <label>Search API (Piped/Invidious)</label>
@@ -368,6 +369,7 @@ Happier Than Ever · Billie Eilish"></textarea>
     <div class="track-table">
       <div class="track-head">
         <div>#</div>
+        <div style="text-align:center">Art</div>
         <div>Track</div>
         <div class="col-sh">Status</div>
         <div style="text-align:right">Actions</div>
@@ -443,7 +445,7 @@ function loadSaved() {
     if (!s) return;
     const data = JSON.parse(s);
     if (data.config) {
-      document.getElementById('cobalt-url').value = data.config.cobalt || 'https://api.cobalt.tools';
+      document.getElementById('cobalt-url').value = data.config.cobalt || 'http://localhost:5000';
       document.getElementById('search-url').value = data.config.search || 'https://api.piped.private.coffee';
       document.getElementById('cors-proxy').value = data.config.cors || '';
       document.getElementById('direct-search-mode').checked = !!data.config.direct;
@@ -696,8 +698,11 @@ function buildRow(t, displayNum, idx) {
   }
   actions += `<button class="icon-btn" title="Copy yt-dlp command" onclick="event.stopPropagation(); copySingle(${idx})">⎘</button>`;
 
+  const thumbUrl = t.thumb || 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%23252525%22/%3E%3C/svg%3E';
+
   row.innerHTML = `
     <div class="track-num">${displayNum}</div>
+    <div style="display:flex;justify-content:center"><img src="${thumbUrl}" class="t-thumb" loading="lazy"></div>
     <div>
       <div class="t-name">${esc(t.name)}</div>
       <div class="t-sub">${esc(t.artist||'')}${t.album ? ' · ' + esc(t.album) : ''}</div>
@@ -819,7 +824,10 @@ async function searchYoutube(track, idx) {
       }
 
       const id = best.videoId || best.id;
-      if (id) return (id.includes('http')) ? id : `https://www.youtube.com/watch?v=${id}`;
+      if (id) {
+        if (best.thumbnail) track.thumb = best.thumbnail;
+        return (id.includes('http')) ? id : `https://www.youtube.com/watch?v=${id}`;
+      }
     } catch(e) {
       console.warn(`Search instance failed: ${url}`, e);
     }
@@ -827,7 +835,7 @@ async function searchYoutube(track, idx) {
   return null;
 }
 
-async function fetchAudioUrl(ytUrl) {
+async function fetchAudioUrl(ytUrl, idx) {
   const cobaltBase = document.getElementById('cobalt-url').value.replace(/\/$/, '');
 
   // Attempt Cobalt
@@ -840,6 +848,10 @@ async function fetchAudioUrl(ytUrl) {
     });
     if (r.ok) {
       const d = await r.json();
+      if (d.thumbnail && !allTracks[idx].thumb) {
+        allTracks[idx].thumb = d.thumbnail;
+        refreshRow(idx);
+      }
       if (d.url) return d.url;
       if (d.status === 'redirect' && d.url) return d.url;
     } else {
@@ -886,7 +898,7 @@ async function downloadOne(idx) {
     let downloadUrl = null;
     if (ytUrl) {
       updateTrackLabel(idx, '⚙️ Converting...');
-      downloadUrl = await fetchAudioUrl(ytUrl);
+      downloadUrl = await fetchAudioUrl(ytUrl, idx);
     }
 
     // Fallback: If search failed, try sending the track name directly to Cobalt
